@@ -2,6 +2,7 @@ import os
 import requests
 import smtplib
 import time
+import sys
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import xml.etree.ElementTree as ET
@@ -19,6 +20,9 @@ EMAIL_SENDER = "mananop302@gmail.com"
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 EMAIL_RECEIVER = "manexstore0@gmail.com"
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+
+def log(message):
+    print(message, flush=True)
 
 def analyze_with_groq(title, body_text):
     prompt = f"""
@@ -49,7 +53,7 @@ def analyze_with_groq(title, body_text):
             answer = result['choices'][0]['message']['content'].strip().upper()
             return "YES" in answer
     except Exception as e:
-        print(f"Groq API Error: {e}")
+        log(f"Groq API Error: {e}")
     
     return False
 
@@ -68,9 +72,9 @@ def send_email(title, link, created_date, subreddit):
         server.login(EMAIL_SENDER, EMAIL_PASSWORD)
         server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
         server.quit()
-        print(f"Email sent successfully for: {title}")
+        log(f"Email sent successfully for: {title}")
     except Exception as e:
-        print(f"Error sending email: {e}")
+        log(f"Error sending email: {e}")
 
 def check_reddit():
     total_checked = 0
@@ -80,14 +84,14 @@ def check_reddit():
         url = f"https://www.reddit.com/r/{sub}/new.rss"
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0"}
         
-        print(f"\nScanning r/{sub}...")
+        log(f"\nScanning r/{sub}...")
         try:
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
                 root = ET.fromstring(response.content)
                 namespace = {'atom': 'http://www.w3.org/2005/Atom'}
                 entries = root.findall('atom:entry', namespace)
-                print(f"Fetched {len(entries)} posts from r/{sub}.")
+                log(f"Fetched {len(entries)} posts from r/{sub}.")
                 
                 for entry in entries:
                     total_checked += 1
@@ -99,28 +103,28 @@ def check_reddit():
                     body_text = content_elem.text if content_elem is not None and content_elem.text else ''
                     clean_body = re.sub('<[^<]+?>', '', body_text)
                     
-                    print(f"[{total_checked}] Checking r/{sub}: '{title[:40]}...'")
+                    log(f"[{total_checked}] Checking r/{sub}: '{title[:40]}...'")
                     
                     is_client = analyze_with_groq(title, clean_body)
                     
                     if is_client:
-                        print(f"-> MATCH FOUND! Client in r/{sub}.")
+                        log(f"-> MATCH FOUND! Client in r/{sub}.")
                         send_email(title, link, updated, sub)
                         match_found_count += 1
                     else:
-                        print("-> Ignored.")
+                        log("-> Ignored.")
                     
-                    time.sleep(2) # Rate limit se bachne ke liye delay
+                    time.sleep(2)
             else:
-                print(f"Failed or restricted r/{sub} (Status: {response.status_code})")
+                log(f"Failed or restricted r/{sub} (Status: {response.status_code})")
         except Exception as e:
-            print(f"Error checking r/{sub}: {e}")
+            log(f"Error checking r/{sub}: {e}")
         
-        time.sleep(3) # Subreddit switch karte waqt gap dena
+        time.sleep(3)
             
-    print(f"\nFinished run. Total posts checked: {total_checked}, Total clients found & emailed: {match_found_count}")
+    log(f"\nFinished run. Total posts checked: {total_checked}, Total clients found & emailed: {match_found_count}")
 
 if __name__ == "__main__":
-    print("Optimized Multi-Subreddit Groq Client Finder started...")
+    log("Optimized Multi-Subreddit Groq Client Finder started...")
     check_reddit()
-    print("Script finished execution.")
+    log("Script finished execution.")
