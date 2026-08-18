@@ -2,7 +2,7 @@ name: Run Discord Bot
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # Har 30 minutes baad action chalega
+    - cron: '*/30 * * * *' # Har 30 minutes baad chalega
   workflow_dispatch:
 
 jobs:
@@ -25,4 +25,6 @@ jobs:
       - name: Run Bot Script
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
         run: python bot.py
