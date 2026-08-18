@@ -5,25 +5,26 @@ import time
 import sys
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import re
+import random
 
 SUBREDDITS = [
-    "forhire", "freelance_forhire", "Hiring", "jobbit",
+    "forhire", "freelance_forhire", "jobbit",
     "freelance", "digital_marketing", "SEO", "wordpress", "webdev",
-    "DesignJobs", "Shopify", "ecommerce", "remotework", "smallbusiness",
+    "DesignJobs", "Shopify", "ecommerce", "smallbusiness",
     "startups", "ClientsForHire", "ProgrammingJobs", "WebDesign",
-    "LocalSEO", "WebDevelopment", "FullStack", "WordPressHelp",
-    "Agency", "TechJobs", "WordpressPlugins", "SEOWriters", "ContentMarketing",
-    "SaaS", "BusinessHub", "LazyWeb", "GrowMyBusiness", "SellMySkills",
-    "WorkOnline", "OnlineJobs", "VirtualAssistant", "ForHire_SEO",
-    "AskMarketing", "Marketing", "SocialMediaMarketing", "PPC", "GoogleAds",
-    "Frontend", "PHP", "HTML", "Python", "RemoteJobs", "Entrepreneur"
+    "LocalSEO", "WebDevelopment", "FullStack", "WordPressHelp"
 ]
 
 EMAIL_SENDER = "mananop302@gmail.com"
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 EMAIL_RECEIVER = "manexstore0@gmail.com"
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0"
+]
 
 def log(message):
     print(message, flush=True)
@@ -71,7 +72,7 @@ def send_run_report(total_checked, found_clients):
             msg['Subject'] = f"🔥 {len(found_clients)} Client(s) Found! - Multi-Platform Bot Report"
             body = f"Bot run completed successfully!\n\nTotal Posts Checked: {total_checked}\nClients Found: {len(found_clients)}\n\n--- MATCHED CLIENT POSTS ---\n\n"
             for client in found_clients:
-                body += f"Platform: {client['platform']}\nSource: {client['source']}\nTitle: {client['title']}\nDate: {client['date']}\nDirect URL: {client['link']}\n\n"
+                body += f"Platform: {client['platform']} ({client['source']})\nTitle: {client['title']}\nDate: {client['date']}\nDirect URL: {client['link']}\n\n"
         else:
             msg['Subject'] = f"ℹ️ Bot Run Report: No Clients Found ({total_checked} posts)"
             body = f"Bot run completed successfully!\n\nTotal Posts Checked: {total_checked}\nClients Found: 0\n\nNo matching SEO/WordPress clients found in this run. Bot will check again next hour."
@@ -92,14 +93,18 @@ def check_reddit():
     found_clients = []
     
     for sub in SUBREDDITS:
-        url = f"https://www.reddit.com/r/{sub}/new.json?limit=25"
+        url = f"https://www.reddit.com/r/{sub}/new.json?limit=15"
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            "User-Agent": random.choice(USER_AGENTS),
+            "Accept": "application/json",
+            "Accept-Language": "en-US,en;q=0.9"
         }
         
         log(f"\nScanning r/{sub}...")
         try:
             response = requests.get(url, headers=headers)
+            log(f"r/{sub} Status: {response.status_code}")
+            
             if response.status_code == 200:
                 data = response.json()
                 posts = data.get('data', {}).get('children', [])
@@ -131,20 +136,20 @@ def check_reddit():
                     else:
                         log("-> Ignored.")
                     
-                    time.sleep(1)
+                    time.sleep(2)
             else:
-                log(f"Failed or restricted r/{sub} (Status: {response.status_code})")
+                log(f"Skipping r/{sub} due to restriction (Status: {response.status_code})")
         except Exception as e:
             log(f"Error checking r/{sub}: {e}")
         
-        time.sleep(2)
+        time.sleep(3)
         
     return total_checked, found_clients
 
 def check_hackernews():
-    log("\nScanning Hacker News via Algolia API...")
+    log("\nScanning Hacker News...")
     url = "https://hn.algolia.com/api/v1/search_by_date?tags=story&hitsPerPage=50"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    headers = {"User-Agent": random.choice(USER_AGENTS)}
     
     total_checked = 0
     found_clients = []
@@ -172,7 +177,7 @@ def check_hackernews():
                     log(f"-> MATCH FOUND! Client on Hacker News.")
                     found_clients.append({
                         "platform": "Hacker News",
-                        "source": "Hacker News API",
+                        "source": "HN API",
                         "title": title,
                         "link": link,
                         "date": created_at
@@ -181,8 +186,6 @@ def check_hackernews():
                     log("-> Ignored.")
                 
                 time.sleep(1)
-        else:
-            log(f"Failed to fetch Hacker News (Status: {response.status_code})")
     except Exception as e:
         log(f"Error checking Hacker News: {e}")
         
@@ -191,10 +194,7 @@ def check_hackernews():
 if __name__ == "__main__":
     log("Multi-Platform Client Finder started...")
     
-    # 1. Check Reddit
     reddit_checked, reddit_clients = check_reddit()
-    
-    # 2. Check Hacker News
     hn_checked, hn_clients = check_hackernews()
     
     total_checked = reddit_checked + hn_checked
