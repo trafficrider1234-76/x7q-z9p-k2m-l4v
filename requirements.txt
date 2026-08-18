@@ -1,2 +1,1 @@
-discord.py
-groq
+requests==2.31.0
