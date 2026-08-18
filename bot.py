@@ -1,78 +1,69 @@
-import os
+import time
+import requests
 import smtplib
-from email.message import EmailMessage
-import discord
-from groq import Groq
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
-intents = discord.Intents.default()
-intents.message_content = True
+# Configurations
+SUBREDDIT = "forhire"
+KEYWORDS = ["web developer", "seo", "wordpress"]
+EMAIL_SENDER = "manexstore0@gmail.com"
+EMAIL_PASSWORD = "Aapka_Email_App_Password"
+EMAIL_RECEIVER = "manexstore0@gmail.com"
 
-client = discord.Client(intents=intents)
+seen_posts = set()
 
-# Groq client initialize karein
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+def send_email(title, link):
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_SENDER
+        msg['To'] = EMAIL_RECEIVER
+        msg['Subject'] = f"New Client Post: {title}"
+        
+        body = f"A new matching post was found on Reddit!\n\nTitle: {title}\nLink: {link}"
+        msg.attach(MIMEText(body, 'plain'))
+        
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+        server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
+        server.quit()
+        print("Email sent successfully!")
+    except Exception as e:
+        print(f"Error sending email: {e}")
 
-def analyze_with_groq(message_content):
-    prompt = f"""
-    Aap ek expert sales assistant hain. Niche diye gaye Discord message ko analyze karein aur batayein ke kya yeh banda SEO, Web Development, ya Digital Marketing ki koi service khareedna chahta hai, ya kisi madad ki talash mein hai?
-    
-    Message: "{message_content}"
-    
-    Sirf "YES" ya "NO" mein jawab dein. Agar wo service ya help mang raha hai toh YES likhein, warna NO likhein.
-    """
+def check_reddit():
+    url = f"https://www.reddit.com/r/{SUBREDDIT}/new.json?limit=10"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     
     try:
-        completion = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-            max_tokens=5
-        )
-        result = completion.choices[0].message.content.strip().upper()
-        return "YES" in result
-    except Exception as e:
-        print(f"Groq API Error: {e}")
-        return False
-
-def send_email_alert(client_name, message_content):
-    sender_email = os.getenv('EMAIL_ADDRESS')
-    app_password = os.getenv('EMAIL_PASSWORD')
-    
-    msg = EmailMessage()
-    msg.set_content(f"Verified Client Found!\n\nUser: {client_name}\nMessage: {message_content}")
-    msg['Subject'] = "New Qualified Client via Groq & Discord!"
-    msg['From'] = sender_email
-    msg['To'] = "manexstore0@gmail.com"
-
-    try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-            smtp.login(sender_email, app_password)
-            smtp.send_message(msg)
-        print("Email alert sent successfully!")
-    except Exception as e:
-        print(f"Failed to send email: {e}")
-
-@client.event
-async def on_ready():
-    print(f'Logged in as {client.user}')
-
-@client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
-    
-    # Message lamba ya meaningful ho tabhi check karein
-    if len(message.content.strip()) > 10:
-        print(f"Analyzing message from {message.author}: {message.content}")
-        
-        # Groq se poochwayein ke yeh client hai ya nahi
-        is_client = analyze_with_groq(message.content)
-        
-        if is_client:
-            print(f"--> Valid client detected! Sending email...")
-            send_email_alert(str(message.author), message.content)
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            data = response.json()
+            posts = data['data']['children']
+            
+            for post in posts:
+                post_data = post['data']
+                post_id = post_data['id']
+                title = post_data['title']
+                permalink = post_data['permalink']
+                post_url = f"https://www.reddit.com{permalink}"
+                
+                if post_id not in seen_posts:
+                    seen_posts.add(post_id)
+                    
+                    for keyword in KEYWORDS:
+                        if keyword.lower() in title.lower():
+                            print(f"Match found: {title}")
+                            send_email(title, post_url)
+                            break
         else:
-            print(f"--> Ignored: Not a service request.")
+            print(f"Failed to fetch data, status code: {response.status_code}")
+    except Exception as e:
+        print(f"Error fetching Reddit data: {e}")
 
-token = os.getenv('DISCORD_TOKEN')
-client.run(token)
+if __name__ == "__main__":
+    print("Reddit Client Finder script started...")
+    while True:
+        check_reddit()
+        time.sleep(300)
