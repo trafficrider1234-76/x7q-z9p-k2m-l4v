@@ -65,7 +65,11 @@ def send_email(title, link, created_date):
 
 def check_reddit():
     url = f"https://www.reddit.com/r/{SUBREDDIT}/new.json?limit=20"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9"
+    }
     
     print(f"Fetching posts from r/{SUBREDDIT} for Groq AI analysis...")
     try:
