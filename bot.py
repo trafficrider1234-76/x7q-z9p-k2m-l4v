@@ -1,11 +1,25 @@
 import os
 import requests
 import smtplib
+import time
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import xml.etree.ElementTree as ET
+import re
 
-SUBREDDIT = "forhire"
+SUBREDDITS = [
+    "forhire", "freelance_forhire", "Hiring", "remotejobs", "jobbit",
+    "freelance", "digital_marketing", "SEO", "wordpress", "webdev",
+    "DesignJobs", "HTML", "PHP", "Shopify", "ecommerce",
+    "remotework", "entrepreneur", "smallbusiness", "startups", "ClientsForHire",
+    "HireWriters", "ProgrammingJobs", "CodeForCash", "freelancers", "Agency",
+    "TechJobs", "WebDesign", "WordpressPlugins", "SEOWriters", "LocalSEO",
+    "ContentMarketing", "SaaS", "BusinessHub", "LazyWeb", "GrowMyBusiness",
+    "EntrepreneurRideAlong", "SellMySkills", "WorkOnline", "OnlineJobs", "VirtualAssistant",
+    "ForHire_SEO", "WordPressHelp", "AskMarketing", "Marketing", "SocialMediaMarketing",
+    "PPC", "GoogleAds", "WebDevelopment", "Frontend", "FullStack"
+]
+
 EMAIL_SENDER = "manexstore0@gmail.com"
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 EMAIL_RECEIVER = "manexstore0@gmail.com"
@@ -13,8 +27,8 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 def analyze_with_groq(title, body_text):
     prompt = f"""
-    You are an expert SEO and Web Development client filter. 
-    Analyze the following Reddit post to determine if the poster is a CLIENT looking to hire someone for SEO, Web Development, or WordPress services.
+    You are an expert SEO, WordPress, and Web Development client filter. 
+    Analyze the following Reddit post to determine if the poster is a CLIENT looking to hire someone for SEO, WordPress, or Web Development services.
     
     Post Title: {title}
     Post Body: {body_text}
@@ -44,14 +58,14 @@ def analyze_with_groq(title, body_text):
     
     return False
 
-def send_email(title, link, created_date):
+def send_email(title, link, created_date, subreddit):
     try:
         msg = MIMEMultipart()
         msg['From'] = EMAIL_SENDER
         msg['To'] = EMAIL_RECEIVER
-        msg['Subject'] = f"Groq Verified Client Post: {title}"
+        msg['Subject'] = f"Client Found in r/{subreddit}: {title}"
         
-        body = f"Groq AI verified a matching client post!\n\nTitle: {title}\nDate: {created_date}\nLink: {link}"
+        body = f"Groq AI verified a matching client post!\n\nSubreddit: r/{subreddit}\nTitle: {title}\nDate: {created_date}\nLink: {link}"
         msg.attach(MIMEText(body, 'plain'))
         
         server = smtplib.SMTP('smtp.gmail.com', 587)
@@ -64,53 +78,52 @@ def send_email(title, link, created_date):
         print(f"Error sending email: {e}")
 
 def check_reddit():
-    url = f"https://www.reddit.com/r/{SUBREDDIT}/new.rss"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) RSSReader/1.0"}
+    total_checked = 0
+    match_found_count = 0
     
-    print(f"Fetching RSS feed from r/{SUBREDDIT}...")
-    try:
-        response = requests.get(url, headers=headers)
-        print(f"Reddit RSS Response Status Code: {response.status_code}")
+    for sub in SUBREDDITS:
+        url = f"https://www.reddit.com/r/{sub}/new.rss"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) RSSReader/1.0"}
         
-        if response.status_code == 200:
-            root = ET.fromstring(response.content)
-            namespace = {'atom': 'http://www.w3.org/2005/Atom'}
-            entries = root.findall('atom:entry', namespace)
-            print(f"Successfully fetched {len(entries)} posts. Analyzing with Groq...")
+        print(f"\nScanning r/{sub}...")
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                root = ET.fromstring(response.content)
+                namespace = {'atom': 'http://www.w3.org/2005/Atom'}
+                entries = root.findall('atom:entry', namespace)
+                print(f"Fetched {len(entries)} posts from r/{sub}.")
+                
+                for entry in entries:
+                    total_checked += 1
+                    title = entry.find('atom:title', namespace).text
+                    link = entry.find('atom:link', namespace).attrib['href']
+                    updated = entry.find('atom:updated', namespace).text
+                    
+                    content_elem = entry.find('atom:content', namespace)
+                    body_text = content_elem.text if content_elem is not None and content_elem.text else ''
+                    clean_body = re.sub('<[^<]+?>', '', body_text)
+                    
+                    print(f"[{total_checked}] Checking r/{sub}: '{title[:40]}...'")
+                    
+                    is_client = analyze_with_groq(title, clean_body)
+                    
+                    if is_client:
+                        print(f"-> MATCH FOUND! Client in r/{sub}.")
+                        send_email(title, link, updated, sub)
+                        match_found_count += 1
+                    else:
+                        print("-> Ignored.")
+                    
+                    time.sleep(1)
+            else:
+                print(f"Failed or restricted r/{sub} (Status: {response.status_code})")
+        except Exception as e:
+            print(f"Error checking r/{sub}: {e}")
             
-            match_found = False
-            for entry in entries:
-                title = entry.find('atom:title', namespace).text
-                link = entry.find('atom:link', namespace).attrib['href']
-                updated = entry.find('atom:updated', namespace).text
-                
-                content_elem = entry.find('atom:content', namespace)
-                body_text = content_elem.text if content_elem is not None and content_elem.text else ''
-                
-                # HTML tags clean karne ke liye (agar RSS mein hon)
-                import re
-                clean_body = re.sub('<[^<]+?>', '', body_text)
-                
-                print(f"Checking post: '{title}'")
-                
-                is_client = analyze_with_groq(title, clean_body)
-                
-                if is_client:
-                    print(f"-> Groq Match Found! Valid client post.")
-                    send_email(title, link, updated)
-                    match_found = True
-                    break
-                else:
-                    print("-> Ignored by Groq (Not a matching client).")
-            
-            if not match_found:
-                print("No matching client posts found in this run.")
-        else:
-            print(f"Failed to fetch data, status code: {response.status_code}")
-    except Exception as e:
-        print(f"Error checking Reddit RSS/Groq: {e}")
+    print(f"\nFinished run. Total posts checked: {total_checked}, Total clients found & emailed: {match_found_count}")
 
 if __name__ == "__main__":
-    print("Groq Reddit RSS Client Finder started...")
+    print("Massive Multi-Subreddit Groq Client Finder started...")
     check_reddit()
     print("Script finished execution.")
