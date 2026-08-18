@@ -1,9 +1,9 @@
 import os
 import requests
 import smtplib
-import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import xml.etree.ElementTree as ET
 
 SUBREDDIT = "forhire"
 EMAIL_SENDER = "manexstore0@gmail.com"
@@ -64,41 +64,40 @@ def send_email(title, link, created_date):
         print(f"Error sending email: {e}")
 
 def check_reddit():
-    url = f"https://www.reddit.com/r/{SUBREDDIT}/new.json?limit=20"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9"
-    }
+    url = f"https://www.reddit.com/r/{SUBREDDIT}/new.rss"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) RSSReader/1.0"}
     
-    print(f"Fetching posts from r/{SUBREDDIT} for Groq AI analysis...")
+    print(f"Fetching RSS feed from r/{SUBREDDIT}...")
     try:
         response = requests.get(url, headers=headers)
-        print(f"Reddit Response Status Code: {response.status_code}")
+        print(f"Reddit RSS Response Status Code: {response.status_code}")
         
         if response.status_code == 200:
-            data = response.json()
-            posts = data['data']['children']
-            print(f"Successfully fetched {len(posts)} posts. Analyzing with Groq...")
+            root = ET.fromstring(response.content)
+            namespace = {'atom': 'http://www.w3.org/2005/Atom'}
+            entries = root.findall('atom:entry', namespace)
+            print(f"Successfully fetched {len(entries)} posts. Analyzing with Groq...")
             
             match_found = False
-            for post in posts:
-                post_data = post['data']
-                title = post_data['title']
-                body_text = post_data.get('selftext', '')
-                permalink = post_data['permalink']
-                post_url = f"https://www.reddit.com{permalink}"
-                created_utc = post_data['created_utc']
+            for entry in entries:
+                title = entry.find('atom:title', namespace).text
+                link = entry.find('atom:link', namespace).attrib['href']
+                updated = entry.find('atom:updated', namespace).text
                 
-                created_date = datetime.datetime.fromtimestamp(created_utc).strftime('%Y-%m-%d %H:%M:%S')
+                content_elem = entry.find('atom:content', namespace)
+                body_text = content_elem.text if content_elem is not None and content_elem.text else ''
                 
-                print(f"Checking post: '{title}' (Date: {created_date})")
+                # HTML tags clean karne ke liye (agar RSS mein hon)
+                import re
+                clean_body = re.sub('<[^<]+?>', '', body_text)
                 
-                is_client = analyze_with_groq(title, body_text)
+                print(f"Checking post: '{title}'")
+                
+                is_client = analyze_with_groq(title, clean_body)
                 
                 if is_client:
                     print(f"-> Groq Match Found! Valid client post.")
-                    send_email(title, post_url, created_date)
+                    send_email(title, link, updated)
                     match_found = True
                     break
                 else:
@@ -109,9 +108,9 @@ def check_reddit():
         else:
             print(f"Failed to fetch data, status code: {response.status_code}")
     except Exception as e:
-        print(f"Error checking Reddit/Groq: {e}")
+        print(f"Error checking Reddit RSS/Groq: {e}")
 
 if __name__ == "__main__":
-    print("Groq Reddit Client Finder started...")
+    print("Groq Reddit RSS Client Finder started...")
     check_reddit()
     print("Script finished execution.")
