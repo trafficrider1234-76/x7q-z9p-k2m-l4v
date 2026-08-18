@@ -20,7 +20,7 @@ SUBREDDITS = [
     "PPC", "GoogleAds", "WebDevelopment", "Frontend", "FullStack"
 ]
 
-EMAIL_SENDER = "manexstore0@gmail.com"
+EMAIL_SENDER = "mananop302@gmail.com"
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 EMAIL_RECEIVER = "manexstore0@gmail.com"
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
