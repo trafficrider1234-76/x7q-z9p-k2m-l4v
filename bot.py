@@ -8,16 +8,11 @@ import xml.etree.ElementTree as ET
 import re
 
 SUBREDDITS = [
-    "forhire", "freelance_forhire", "Hiring", "remotejobs", "jobbit",
+    "forhire", "freelance_forhire", "Hiring", "jobbit",
     "freelance", "digital_marketing", "SEO", "wordpress", "webdev",
-    "DesignJobs", "HTML", "PHP", "Shopify", "ecommerce",
-    "remotework", "entrepreneur", "smallbusiness", "startups", "ClientsForHire",
-    "HireWriters", "ProgrammingJobs", "CodeForCash", "freelancers", "Agency",
-    "TechJobs", "WebDesign", "WordpressPlugins", "SEOWriters", "LocalSEO",
-    "ContentMarketing", "SaaS", "BusinessHub", "LazyWeb", "GrowMyBusiness",
-    "EntrepreneurRideAlong", "SellMySkills", "WorkOnline", "OnlineJobs", "VirtualAssistant",
-    "ForHire_SEO", "WordPressHelp", "AskMarketing", "Marketing", "SocialMediaMarketing",
-    "PPC", "GoogleAds", "WebDevelopment", "Frontend", "FullStack"
+    "DesignJobs", "Shopify", "ecommerce", "remotework", "smallbusiness",
+    "startups", "ClientsForHire", "ProgrammingJobs", "WebDesign",
+    "LocalSEO", "WebDevelopment", "FullStack", "WordPressHelp"
 ]
 
 EMAIL_SENDER = "mananop302@gmail.com"
@@ -83,7 +78,7 @@ def check_reddit():
     
     for sub in SUBREDDITS:
         url = f"https://www.reddit.com/r/{sub}/new.rss"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) RSSReader/1.0"}
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0"}
         
         print(f"\nScanning r/{sub}...")
         try:
@@ -115,15 +110,17 @@ def check_reddit():
                     else:
                         print("-> Ignored.")
                     
-                    time.sleep(1)
+                    time.sleep(2) # Rate limit se bachne ke liye delay
             else:
                 print(f"Failed or restricted r/{sub} (Status: {response.status_code})")
         except Exception as e:
             print(f"Error checking r/{sub}: {e}")
+        
+        time.sleep(3) # Subreddit switch karte waqt gap dena
             
     print(f"\nFinished run. Total posts checked: {total_checked}, Total clients found & emailed: {match_found_count}")
 
 if __name__ == "__main__":
-    print("Massive Multi-Subreddit Groq Client Finder started...")
+    print("Optimized Multi-Subreddit Groq Client Finder started...")
     check_reddit()
     print("Script finished execution.")
