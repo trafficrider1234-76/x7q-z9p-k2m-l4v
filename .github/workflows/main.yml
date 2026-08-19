@@ -1,26 +1,29 @@
-name: Groq Reddit Client Finder
+name: Hourly Reddit Client Finder
+
 on:
   schedule:
-    - cron: '0 * * * *' # Har hour baad run hoga
+    - cron: '0 * * * *' # Har ghante baad automatic run hoga
   workflow_dispatch:
+
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
+
       - name: Run script
         env:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
-          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
         run: |
           python bot.py
