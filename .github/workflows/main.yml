@@ -2,7 +2,7 @@ name: Hourly Reddit Client Finder
 
 on:
   schedule:
-    - cron: '0 * * * *' # Har ghante baad automatic run hoga
+    - cron: '0 */2 * * *' # Har 2 ghante baad automatic run hoga
   workflow_dispatch:
 
 jobs:
