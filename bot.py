@@ -6,6 +6,7 @@ import sys
 import random
 import xml.etree.ElementTree as ET
 import re
+import feedparser
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
@@ -16,6 +17,14 @@ SUBREDDITS = [
     "startups", "ClientsForHire", "ProgrammingJobs", "WebDesign",
     "LocalSEO", "WebDevelopment", "FullStack", "WordPressHelp"
 ]
+
+JOB_FEEDS = {
+    "We Work Remotely (Marketing)": "https://weworkremotely.com/categories/remote-sales-and-marketing-jobs.rss",
+    "We Work Remotely (Dev)": "https://weworkremotely.com/categories/remote-back-end-programming-jobs.rss",
+    "Remote.co": "https://remote.co/remote-jobs/feed/",
+    "Himalayas": "https://himalayas.app/jobs/rss",
+    "Indeed (SEO)": "https://www.indeed.com/rss?q=SEO+Expert"
+}
 
 EMAIL_SENDER = "mananop302@gmail.com"
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
@@ -31,7 +40,6 @@ def log(message):
     print(message, flush=True)
 
 def analyze_with_groq(title, body_text):
-    # Prompt ko thoda flexible aur smart banaya gaya hai
     prompt = f"""
     Analyze this post. Is the author looking to hire someone, seeking help, or asking for a freelancer/agency for SEO, WordPress, Web Development, or digital marketing? 
     Even if they didn't explicitly use the word "hire", if they need someone to fix their site, build a store, or do SEO, answer YES.
@@ -66,20 +74,25 @@ def analyze_with_groq(title, body_text):
     
     return False
 
-def send_run_report(total_checked, found_clients):
+def send_run_report(total_checked, found_clients, empty_platforms):
     try:
         msg = MIMEMultipart()
         msg['From'] = EMAIL_SENDER
         msg['To'] = EMAIL_RECEIVER
         
+        body = f"Bot run completed successfully!\n\nTotal Posts Checked: {total_checked}\nClients Found: {len(found_clients)}\n\n"
+        
+        if empty_platforms:
+            body += f"⚠️ Platforms/Feeds with no matches/empty: {', '.join(empty_platforms)}\n\n"
+            
         if found_clients:
             msg['Subject'] = f"🔥 {len(found_clients)} Client(s) Found! - Bot Report"
-            body = f"Bot run completed successfully!\n\nTotal Posts Checked: {total_checked}\nClients Found: {len(found_clients)}\n\n--- MATCHED CLIENT POSTS ---\n\n"
+            body += "--- MATCHED CLIENT POSTS ---\n\n"
             for client in found_clients:
                 body += f"Platform: {client['platform']} ({client['source']})\nTitle: {client['title']}\nDate: {client['date']}\nDirect URL: {client['link']}\n\n"
         else:
             msg['Subject'] = f"ℹ️ Bot Run Report: No Clients Found ({total_checked} posts)"
-            body = f"Bot run completed successfully!\n\nTotal Posts Checked: {total_checked}\nClients Found: 0\n\nNo matching clients found in this run. Bot will check again next hour."
+            body += "No matching clients found in this run. Bot will check again next hour."
             
         msg.attach(MIMEText(body, 'plain'))
         
@@ -95,6 +108,7 @@ def send_run_report(total_checked, found_clients):
 def check_reddit():
     total_checked = 0
     found_clients = []
+    empty_subs = []
     
     for sub in SUBREDDITS:
         url = f"https://www.reddit.com/r/{sub}/new.rss"
@@ -108,6 +122,9 @@ def check_reddit():
                 namespace = {'atom': 'http://www.w3.org/2005/Atom'}
                 entries = root.findall('atom:entry', namespace)
                 log(f"Fetched {len(entries)} posts from r/{sub}.")
+                
+                if not entries:
+                    empty_subs.append(f"r/{sub}")
                 
                 for entry in entries:
                     total_checked += 1
@@ -131,15 +148,17 @@ def check_reddit():
                             "date": updated
                         })
                     
-                    time.sleep(1.5)
+                    time.sleep(1)
             else:
                 log(f"Failed or restricted r/{sub} (Status: {response.status_code})")
+                empty_subs.append(f"r/{sub}")
         except Exception as e:
             log(f"Error checking r/{sub}: {e}")
+            empty_subs.append(f"r/{sub}")
         
         time.sleep(2)
         
-    return total_checked, found_clients
+    return total_checked, found_clients, empty_subs
 
 def check_hackernews():
     log("\nScanning Hacker News...")
@@ -182,15 +201,65 @@ def check_hackernews():
         
     return total_checked, found_clients
 
+def check_job_boards():
+    total_checked = 0
+    found_clients = []
+    empty_boards = []
+
+    for name, url in JOB_FEEDS.items():
+        log(f"\nScanning job feed: {name}...")
+        try:
+            feed = feedparser.parse(url)
+            entries = feed.entries[:10] # Top 10 latest entries
+            log(f"Fetched {len(entries)} listings from {name}.")
+            
+            if not entries:
+                empty_boards.append(name)
+                continue
+                
+            found_in_feed = False
+            for entry in entries:
+                total_checked += 1
+                title = entry.get('title', '')
+                link = entry.get('link', '')
+                published = entry.get('published', 'N/A')
+                summary = entry.get('summary', '') or entry.get('description', '')
+                clean_body = re.sub('<[^<]+?>', '', summary)
+                
+                is_client = analyze_with_groq(title, clean_body)
+                
+                if is_client:
+                    log(f"-> MATCH FOUND! Job on {name}.")
+                    found_clients.append({
+                        "platform": "Job Board",
+                        "source": name,
+                        "title": title,
+                        "link": link,
+                        "date": published
+                    })
+                    found_in_feed = True
+                
+                time.sleep(1)
+                
+            if not found_in_feed:
+                empty_boards.append(name)
+        except Exception as e:
+            log(f"Error checking {name}: {e}")
+            empty_boards.append(name)
+            
+    return total_checked, found_clients, empty_boards
+
 if __name__ == "__main__":
-    log("Flexible Multi-Platform Client Finder started...")
+    log("Unified Multi-Platform Client Finder started...")
     
-    reddit_checked, reddit_clients = check_reddit()
+    reddit_checked, reddit_clients, empty_subs = check_reddit()
     hn_checked, hn_clients = check_hackernews()
+    job_checked, job_clients, empty_boards = check_job_boards()
     
-    total_checked = reddit_checked + hn_checked
-    all_clients = reddit_clients + hn_clients
+    total_checked = reddit_checked + hn_checked + job_checked
+    all_clients = reddit_clients + hn_clients + job_clients
+    all_empty = empty_subs + empty_boards
     
     log(f"\nFinished full run. Total posts checked: {total_checked}, Total clients found: {len(all_clients)}")
-    send_run_report(total_checked, all_clients)
+    send_run_report(total_checked, all_clients, all_empty)
     log("Script finished execution.")
