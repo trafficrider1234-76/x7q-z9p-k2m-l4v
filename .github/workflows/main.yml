@@ -1,7 +1,7 @@
 name: Groq Reddit Client Finder
 on:
   schedule:
-    - cron: '*/5 * * * *' # Har 5 minute baad run hoga
+    - cron: '0 * * * *' # Har hour baad run hoga
   workflow_dispatch:
 jobs:
   run-bot:
