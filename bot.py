@@ -24,22 +24,23 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0"
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15"
 ]
 
 def log(message):
     print(message, flush=True)
 
 def analyze_with_groq(title, body_text):
+    # Prompt ko thoda flexible aur smart banaya gaya hai
     prompt = f"""
-    You are an expert SEO, WordPress, and Web Development client filter. 
-    Analyze the following post to determine if the poster is a CLIENT looking to hire someone for SEO, WordPress, or Web Development services.
+    Analyze this post. Is the author looking to hire someone, seeking help, or asking for a freelancer/agency for SEO, WordPress, Web Development, or digital marketing? 
+    Even if they didn't explicitly use the word "hire", if they need someone to fix their site, build a store, or do SEO, answer YES.
+    If they are offering services, looking for a job themselves, or completely unrelated, answer NO.
     
-    Post Title: {title}
-    Post Body: {body_text}
+    Title: {title}
+    Body: {body_text}
     
-    Respond ONLY with "YES" if they are looking to hire a freelancer/agency for these services, or "NO" if they are offering services, looking for a job themselves, or unrelated.
+    Respond ONLY with "YES" or "NO".
     """
     
     headers = {
@@ -50,7 +51,7 @@ def analyze_with_groq(title, body_text):
     payload = {
         "model": "llama-3.3-70b-versatile",
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.1
+        "temperature": 0.2
     }
     
     try:
@@ -58,6 +59,7 @@ def analyze_with_groq(title, body_text):
         if response.status_code == 200:
             result = response.json()
             answer = result['choices'][0]['message']['content'].strip().upper()
+            log(f"AI Verdict for '{title[:30]}...': {answer}")
             return "YES" in answer
     except Exception as e:
         log(f"Groq API Error: {e}")
@@ -77,7 +79,7 @@ def send_run_report(total_checked, found_clients):
                 body += f"Platform: {client['platform']} ({client['source']})\nTitle: {client['title']}\nDate: {client['date']}\nDirect URL: {client['link']}\n\n"
         else:
             msg['Subject'] = f"ℹ️ Bot Run Report: No Clients Found ({total_checked} posts)"
-            body = f"Bot run completed successfully!\n\nTotal Posts Checked: {total_checked}\nClients Found: 0\n\nNo matching SEO/WordPress clients found in this run. Bot will check again next hour."
+            body = f"Bot run completed successfully!\n\nTotal Posts Checked: {total_checked}\nClients Found: 0\n\nNo matching clients found in this run. Bot will check again next hour."
             
         msg.attach(MIMEText(body, 'plain'))
         
@@ -101,8 +103,6 @@ def check_reddit():
         log(f"\nScanning r/{sub} via RSS...")
         try:
             response = requests.get(url, headers=headers)
-            log(f"r/{sub} Status: {response.status_code}")
-            
             if response.status_code == 200:
                 root = ET.fromstring(response.content)
                 namespace = {'atom': 'http://www.w3.org/2005/Atom'}
@@ -119,8 +119,6 @@ def check_reddit():
                     body_text = content_elem.text if content_elem is not None and content_elem.text else ''
                     clean_body = re.sub('<[^<]+?>', '', body_text)
                     
-                    log(f"[{total_checked}] Checking r/{sub}: '{title[:40]}...'")
-                    
                     is_client = analyze_with_groq(title, clean_body)
                     
                     if is_client:
@@ -132,22 +130,20 @@ def check_reddit():
                             "link": link,
                             "date": updated
                         })
-                    else:
-                        log("-> Ignored.")
                     
-                    time.sleep(2)
+                    time.sleep(1.5)
             else:
                 log(f"Failed or restricted r/{sub} (Status: {response.status_code})")
         except Exception as e:
             log(f"Error checking r/{sub}: {e}")
         
-        time.sleep(3)
+        time.sleep(2)
         
     return total_checked, found_clients
 
 def check_hackernews():
     log("\nScanning Hacker News...")
-    url = "https://hn.algolia.com/api/v1/search_by_date?tags=story&hitsPerPage=50"
+    url = "https://hn.algolia.com/api/v1/search_by_date?tags=story&hitsPerPage=30"
     headers = {"User-Agent": random.choice(USER_AGENTS)}
     
     total_checked = 0
@@ -168,8 +164,6 @@ def check_hackernews():
                 created_at = hit.get('created_at', '')
                 body_text = hit.get('story_text', '') or ''
                 
-                log(f"[HN {total_checked}] Checking HN: '{title[:40]}...'")
-                
                 is_client = analyze_with_groq(title, body_text)
                 
                 if is_client:
@@ -181,8 +175,6 @@ def check_hackernews():
                         "link": link,
                         "date": created_at
                     })
-                else:
-                    log("-> Ignored.")
                 
                 time.sleep(1)
     except Exception as e:
@@ -191,7 +183,7 @@ def check_hackernews():
     return total_checked, found_clients
 
 if __name__ == "__main__":
-    log("RSS & Multi-Platform Client Finder started...")
+    log("Flexible Multi-Platform Client Finder started...")
     
     reddit_checked, reddit_clients = check_reddit()
     hn_checked, hn_clients = check_hackernews()
